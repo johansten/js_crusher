@@ -1,4 +1,6 @@
 
+import suffix_array
+
 #-------------------------------------------------------------------------------
 
 def crush(script):
@@ -22,8 +24,9 @@ def crush(script):
 	#
 
 	matches = _find_matches(script)
-	escape_chars = []
+	used_escapes = []
 
+	i = 0
 	while True:
 
 		if not escape_chars:
@@ -36,33 +39,39 @@ def crush(script):
 		for needle in list(matches):
 			num_matches = script.count(needle)
 			length = len(needle)
-			weight = (length * num_matches) - length - (num_matches + 2)*escape_len
-			if weight < 1:
-				matches.remove(needle)
-			else:
+			weight = (
+				(length * num_matches) -
+				(length + (num_matches + 2) * escape_len)
+			)
+
+			if weight >= 1:
 				if weight > max_weight:
 					max_weight = weight
 					max_needle = needle
+					max_reps = num_matches
+			else:
+				matches.remove(needle)
 
 		if not matches:
 			break
 
-		escape_chars.append(escape)
+		script = escape.join(script.split(max_needle) + [max_needle])
 
-		s = script.split(max_needle)
-		s.append(max_needle)
-		script = escape.join(s)
-
-		matches = set([
+		matches = [
 			escape.join(needle.split(max_needle))
 			for needle in matches
 			if needle != max_needle
-		])
+		]
+
+		used_escapes.append(escape)
+		print '%2d: "%s" (%d)' % (i, max_needle, max_reps)
+
+		i += 1
 
 	quote = '"'
 	decoder = ['_=','%s',';for(Y in $=','%s',')with(_.split($[Y]))_=join(pop());eval(_)']
 	decoder = quote.join(decoder)
-	script = decoder % (script, ''.join(escape_chars)[::-1])
+	script = decoder % (script, ''.join(used_escapes)[::-1])
 
 	return script
 
@@ -70,17 +79,16 @@ def crush(script):
 
 def _find_matches(script):
 
-	l = len(script)
+	suffix = suffix_array.SuffixArray(script)
+	dupes  = suffix.find_all_duplicates()
 
-	matches = set()
-	for length in range(2, l/2):
-		for n in range(l - length):
-			needle = script[n:n+length]
-			num_matches = len(script.split(needle)) - 1
-			if num_matches >= 2:
-				matches.add(needle)
+	matches = []
+	for min_length, max_length, indices in dupes:
+		start_pos = indices[0]
+		for l in xrange(min_length, max_length+1):
+			needle = script[start_pos:start_pos+l]
+			matches.append(needle)
 
 	return matches
 
 #-------------------------------------------------------------------------------
-
